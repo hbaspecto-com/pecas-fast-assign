@@ -2,7 +2,9 @@
 
 import pandas as pd
 
-folder = '/nfs/samba/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified'
+from config import load_settings
+
+folder = load_settings()['paths']['folder']
 
 for f in ['tripData.csv', 'tripData_1.csv', 'tripData_2.csv']:
     path = folder + '/' + f

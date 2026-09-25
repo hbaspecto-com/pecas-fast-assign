@@ -3,24 +3,19 @@ import os
 import pandas as pd
 from aequilibrae.matrix import AequilibraeMatrix
 
+from config import load_settings
+
 # --- Configuration ---
-folder = '/nfs/samba/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified'
-input_path = os.path.join(folder, 'tripData.csv')
-trip_list_path = os.path.join(folder, 'tripData_am_cars.csv')
+settings = load_settings()
+folder = settings['paths']['folder']
+input_path = os.path.join(folder, settings['paths']['input_file'])
+trip_list_path = os.path.join(folder, settings['paths']['trip_list_file'])
 
 # Period numbering: period 1 = 3:00am, each period = 30 min
 # 7:00am = period 9, 7:30am = period 10 (covers 7:00-8:00am)
-AM_PEAK_PERIODS = [9, 10]
+AM_PEAK_PERIODS = settings['trip_filter']['am_peak_periods']
 
-CAR_MODES = {
-    'DRIVEALONEFREE',
-    'DRIVEALONEPAY',
-    'SHARED2FREE',
-    'SHARED2PAY',
-    'SHARED3FREE',
-    'SHARED3PAY',
-    'TNC',
-}
+CAR_MODES = set(settings['trip_filter']['car_modes'])
 
 # --- Step 1: Filter trip data and write trip list CSV ---
 # Skip this step by passing --from-trip-list on the command line

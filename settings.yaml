@@ -1,0 +1,27 @@
+paths:
+  # This machine mounts the share at /Volumes/ProjectWork (macOS SMB mount);
+  # on Linux/network-share clients this is typically /nfs/samba/ProjectWork.
+  folder: "/Volumes/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified"
+  input_file: "tripData.csv"
+  trip_list_file: "tripData_am_cars.csv"
+
+# Period numbering: period 1 = 3:00am, each period = 30 min.
+# 7:00am = period 9, 7:30am = period 10 (covers 7:00-8:00am).
+trip_filter:
+  am_peak_periods: [9, 10]
+  car_modes:
+    - DRIVEALONEFREE
+    - DRIVEALONEPAY
+    - SHARED2FREE
+    - SHARED2PAY
+    - SHARED3FREE
+    - SHARED3PAY
+    - TNC
+
+build:
+  macos:
+    # Homebrew formulae providing an OpenMP-capable compiler + runtime.
+    # aequilibrae ships no macOS wheel on PyPI, and its C++ extension
+    # needs -fopenmp, which Apple's system clang does not support.
+    compiler: llvm
+    openmp_runtime: libomp
