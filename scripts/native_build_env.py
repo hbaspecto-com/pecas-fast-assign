@@ -52,10 +52,12 @@ def main() -> int:
         )
         return 0
 
-    print(f"CC={llvm_prefix}/bin/clang")
-    print(f"CXX={llvm_prefix}/bin/clang++")
-    print(f"CPPFLAGS=-I{libomp_prefix}/include")
-    print(f"LDFLAGS=-L{libomp_prefix}/lib -Wl,-rpath,{libomp_prefix}/lib")
+    # Quoted so eval'ing this output doesn't split LDFLAGS's space-separated
+    # flags into a separate (and invalid) shell command.
+    print(f'CC="{llvm_prefix}/bin/clang"')
+    print(f'CXX="{llvm_prefix}/bin/clang++"')
+    print(f'CPPFLAGS="-I{libomp_prefix}/include"')
+    print(f'LDFLAGS="-L{libomp_prefix}/lib -Wl,-rpath,{libomp_prefix}/lib"')
     return 0
 
 

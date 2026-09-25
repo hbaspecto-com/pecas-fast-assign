@@ -18,6 +18,14 @@ trip_filter:
     - SHARED3PAY
     - TNC
 
+aequilibrae_network:
+  gdb: "OUTPUTS.GDB"
+  link_layer: "AM_Link"
+  node_layer: "AM_Node"
+  # Written under paths.folder; build_aequilibrae_network.py refuses to
+  # overwrite an existing project here unless --overwrite is passed.
+  project_path: "aequilibrae_am"
+
 build:
   macos:
     # Homebrew formulae providing an OpenMP-capable compiler + runtime.
