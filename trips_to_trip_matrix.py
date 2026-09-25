@@ -1,7 +1,9 @@
 
 import os
+import shutil
 import pandas as pd
 from aequilibrae.matrix import AequilibraeMatrix
+from aequilibrae.project import Project
 
 from config import load_settings
 
@@ -10,6 +12,7 @@ settings = load_settings()
 folder = settings['paths']['folder']
 input_path = os.path.join(folder, settings['paths']['input_file'])
 trip_list_path = os.path.join(folder, settings['paths']['trip_list_file'])
+project_path = os.path.join(folder, settings['aequilibrae_network']['project_path'])
 
 # Period numbering: period 1 = 3:00am, each period = 30 min
 # 7:00am = period 9, 7:30am = period 10 (covers 7:00-8:00am)
@@ -61,5 +64,23 @@ mat2.computational_view(['trips'])
 print(f"  Zones: {mat2.zones}")
 print(f"  Total demand: {mat2.matrix['trips'].sum():,.0f}")
 mat2.close()
+
+# --- Step 4: Register the matrix in the AequilibraE network project ---
+# so it shows up alongside the nodes/links built by build_aequilibrae_network.py
+# (see that script's project_path setting) instead of living only as a
+# standalone .aem next to the trip list CSV.
+print("Registering matrix in the AequilibraE network project...")
+project = Project()
+project.open(project_path)
+
+matrix_name = os.path.splitext(os.path.basename(trip_list_path))[0]
+project_aem_name = os.path.basename(aem_path)
+shutil.copy2(aem_path, os.path.join(project.matrices.fldr, project_aem_name))
+
+if project.matrices.check_exists(matrix_name):
+    project.matrices.delete_record(matrix_name)
+project.matrices.new_record(matrix_name, project_aem_name)
+project.close()
+print(f"  Matrix '{matrix_name}' registered in project: {project_path}")
 
 print("Done.")
