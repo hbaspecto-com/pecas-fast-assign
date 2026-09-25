@@ -1,0 +1,4 @@
+[submodule "vendor/aequilibrae"]
+	path = vendor/aequilibrae
+	url = https://github.com/hbaspecto-com/aequilibrae.git
+	shallow = true
