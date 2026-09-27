@@ -32,6 +32,14 @@ The `aequilibrae_network` section controls `build_aequilibrae_network.py`: `gdb`
 - `diagnostic_trip_data.py` — inspects trip data to check whether rows represent person-trips or vehicle-trips, and lists trip mode values.
 - `compare_trip_data_files.py` — compares candidate trip data files for duplicates/differences.
 
+## Trip matrix source
+
+The trip demand matrix is built from `tripData.csv` via `trips_to_trip_matrix.py`. The ARC model also produces a Cube Voyager binary matrix (`trips_joint_AM.TPP`) which was considered as an alternative or cross-check source.
+
+Reading a `.TPP` file requires `TPPDLIBX.DLL` and its companion `TPUTLIBC.DLL`, both proprietary Citilabs/Bentley binaries that ship only with a Cube Voyager installation. This project runs on Linux, where those DLLs cannot be used at all. On the Windows machine where the `.TPP` file lives, only `TPPDLIBX.DLL` was available — `TPUTLIBC.DLL` was absent, causing the DLL load to fail. No Cube Voyager licence or install was available to export the matrix to a portable format (OMX or CSV) as an alternative.
+
+Given that `tripData.csv` is already available, is readable with standard Python tools on any platform, and is the authoritative source for the same trips, it is the correct and practical choice. The `.TPP` file is not used.
+
 ## AequilibraE reference docs
 
 We use the `aequilibrae` package via pip; this is unrelated to that runtime dependency. For local reference to the API docs, `vendor/aequilibrae` is a shallow git submodule pointing at our fork ([hbaspecto-com/aequilibrae](https://github.com/hbaspecto-com/aequilibrae)), sparse-checked-out to just the `docs/` folder. After cloning, run:
