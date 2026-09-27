@@ -22,7 +22,6 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from shapely import LineString
 from aequilibrae.project import Project
 from aequilibrae.project.project_creation import add_triggers, remove_triggers
 
@@ -58,7 +57,7 @@ def build_nodes(centroid_ids: set) -> pd.DataFrame:
     return nodes[["node_id", "is_centroid", "modes", "lon", "lat"]]
 
 
-def build_links(links: gpd.GeoDataFrame) -> pd.DataFrame:
+def build_links(links: gpd.GeoDataFrame, drop_capacity_threshold: float | None = None) -> pd.DataFrame:
     links = links.to_crs(4326)
     links["link_id"] = np.arange(1, len(links) + 1)
     links["a_node"] = links["A"].astype(int)
@@ -75,9 +74,34 @@ def build_links(links: gpd.GeoDataFrame) -> pd.DataFrame:
     links["speed_ab"] = links["AMSPD"]
     links["capacity_ab"] = links["AMCAPACITY"]
     links["travel_time_ab"] = links["TIME1"]
-    # AM_Link stores geometry as single-part MultiLineString; AequilibraE's
-    # links table requires plain LINESTRING.
-    links["wkt"] = links.geometry.apply(lambda g: LineString(g.geoms[0]).wkt)
+
+    # Centroid connectors (FACTYPE == 0) have AMCAPACITY == 0 by convention;
+    # give them a large dummy value so AequilibraE's set_capacity_field()
+    # validation doesn't reject the graph.
+    connector_mask = links["factype"] == CENTROID_FACTYPE
+    links.loc[connector_mask, "capacity_ab"] = 9999.0
+
+    # Check for any remaining non-connector links with zero/null/negative capacity.
+    bad_mask = ~connector_mask & (links["capacity_ab"].isna() | (links["capacity_ab"] <= 0))
+    if bad_mask.any():
+        bad = links.loc[bad_mask, ["link_id", "a_node", "b_node", "name", "factype", "lanes", "speed_ab", "capacity_ab",
+                                   "travel_time_ab"]]
+        print(f"\nWARNING: {bad_mask.sum()} non-connector link(s) have zero/null/negative capacity_ab:")
+        print(bad.to_string(index=False))
+        if drop_capacity_threshold is not None:
+            drop_mask = ~connector_mask & (
+                        links["capacity_ab"].isna() | (links["capacity_ab"] <= drop_capacity_threshold))
+            n_drop = drop_mask.sum()
+            links = links[~drop_mask].copy()
+            print(f"Dropped {n_drop} link(s) with capacity_ab <= {drop_capacity_threshold}.")
+        else:
+            raise SystemExit(
+                "\nHalting. Review the links above and re-run with --drop-low-capacity [THRESHOLD] to remove them."
+            )
+
+        # AM_Link stores geometry as single-part MultiLineString; convert to plain
+        # LINESTRING as required by AequilibraE's links table.
+    links["wkt"] = links.geometry.apply(lambda g: g.geoms[0].wkt)
     return links[
         [
             "link_id", "a_node", "b_node", "direction", "distance", "modes", "link_type",
@@ -89,6 +113,16 @@ def build_links(links: gpd.GeoDataFrame) -> pd.DataFrame:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--overwrite", action="store_true", help="Replace an existing project at project_path")
+    parser.add_argument(
+        "--drop-low-capacity",
+        type=float,
+        metavar="THRESHOLD",
+        nargs="?",
+        const=0.0,
+        default=None,
+        help="Drop non-connector links with capacity_ab <= THRESHOLD before inserting. "
+             "Omit the value to use the default threshold of 0 (i.e. --drop-low-capacity).",
+    )
     args = parser.parse_args()
 
     if project_path.exists():
@@ -103,7 +137,7 @@ def main() -> None:
     )
     centroid_ids = centroid_node_ids(raw_links)
     nodes_df = build_nodes(centroid_ids)
-    links_df = build_links(raw_links)
+    links_df = build_links(raw_links, drop_capacity_threshold=args.drop_low_capacity)
     print(f"  {len(nodes_df):,} nodes ({nodes_df['is_centroid'].sum():,} centroids), {len(links_df):,} links")
 
     project = Project()
