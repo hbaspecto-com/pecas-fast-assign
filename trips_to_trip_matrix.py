@@ -45,35 +45,51 @@ else:
     print(f"  Trip list written to: {trip_list_path}")
 
 # --- Step 2: Create AequilibraE matrix from trip list ---
+# Built directly against the network's full centroid set rather than via
+# create_from_trip_list(), for two reasons:
+#  1. create_from_trip_list() never writes the actual TAZ numbers into the
+#     matrix's zone index - it's left at all zeros (AequilibraE bug/gap,
+#     confirmed against the installed version).
+#  2. TrafficClass requires the matrix's zone index to be *exactly* equal
+#     (np.array_equal) to the graph's centroid list. Some centroids have no
+#     AM-peak car trips at all, so deriving the zone list purely from the
+#     trip list's unique TAZs would omit them; those zones must still be
+#     present in the matrix as empty rows/columns.
 print("Creating AequilibraE matrix...")
-mat = AequilibraeMatrix()
-mat.create_from_trip_list(
-    path_to_file=trip_list_path,
-    from_column='orig_taz',
-    to_column='dest_taz',
-    list_cores=['trips'],
-)
+trip_df = pd.read_csv(trip_list_path)
+
+centroid_project = Project()
+centroid_project.open(project_path)
+with centroid_project.db_connection as conn:
+    zones_list = [row[0] for row in conn.execute(
+        "select node_id from nodes where is_centroid=1 order by node_id;"
+    ).fetchall()]
+centroid_project.close()
+
+missing = (set(trip_df['orig_taz']) | set(trip_df['dest_taz'])) - set(zones_list)
+if missing:
+    raise SystemExit(
+        f"Trip list references {len(missing):,} TAZ(s) that are not centroids "
+        f"in the network, e.g. {sorted(missing)[:20]}"
+    )
+
+zone_index = {zone: i for i, zone in enumerate(zones_list)}
+nb_zones = len(zones_list)
+full = np.zeros((nb_zones, nb_zones), dtype=np.float64)
+for (orig, dest), trips in trip_df.groupby(['orig_taz', 'dest_taz'])['trips'].sum().items():
+    full[zone_index[orig], zone_index[dest]] += trips
 
 # AequilibraE saves the .aem alongside the trip list CSV with the same stem
 aem_path = os.path.splitext(trip_list_path)[0] + '.aem'
+mat = AequilibraeMatrix()
+mat.create_empty(file_name=aem_path, zones=nb_zones, matrix_names=['trips'], memory_only=False)
+mat.indices[:, 0] = np.array(zones_list)
+mat.set_index(mat.index_names[0])
+mat.matrix['trips'][:, :] = full
+mat.save()
+mat.close()
 print(f"  Matrix written to: {aem_path}")
-
-# --- Step 2b: Fix up the zone index ---
-# create_from_trip_list() leaves the matrix's zone index at all zeros - it
-# never assigns the actual TAZ numbers (AequilibraE bug/gap, confirmed
-# against the installed version). The assignment step matches the matrix's
-# zone index against the network's centroid node ids, so without this the
-# two are never compatible. Re-derive the same sorted zone list the library
-# used internally to build the matrix and write it into the zone index.
-trip_df = pd.read_csv(trip_list_path)
-zones_list = sorted(set(trip_df['orig_taz'].unique()) | set(trip_df['dest_taz'].unique()))
-mat_fix = AequilibraeMatrix()
-mat_fix.load(aem_path)
-mat_fix.indices[:, 0] = np.array(zones_list)
-mat_fix.set_index(mat_fix.index_names[0])
-mat_fix.save()
-mat_fix.close()
-print(f"  Zone index set to {len(zones_list):,} TAZ ids (range {zones_list[0]}-{zones_list[-1]})")
+print(f"  Zone index set to {nb_zones:,} network centroid ids (range {zones_list[0]}-{zones_list[-1]})")
 
 # --- Step 3: Load and summarise ---
 mat2 = AequilibraeMatrix()
@@ -93,10 +109,17 @@ project.open(project_path)
 
 matrix_name = os.path.splitext(os.path.basename(trip_list_path))[0]
 project_aem_name = os.path.basename(aem_path)
-shutil.copy2(aem_path, os.path.join(project.matrices.fldr, project_aem_name))
 
 if project.matrices.check_exists(matrix_name):
+    # delete_record() unlinks the file at this path too, so it must run
+    # before we copy the new matrix in - otherwise it deletes the copy we
+    # just made instead of the stale one. It also leaves a stale record
+    # object in the in-memory registry, which would make new_record() below
+    # falsely detect a file_name collision with the record just deleted, so
+    # reload the registry from the (now updated) database afterwards.
     project.matrices.delete_record(matrix_name)
+    project.matrices.reload()
+shutil.copy2(aem_path, os.path.join(project.matrices.fldr, project_aem_name))
 project.matrices.new_record(matrix_name, project_aem_name)
 project.close()
 print(f"  Matrix '{matrix_name}' registered in project: {project_path}")
