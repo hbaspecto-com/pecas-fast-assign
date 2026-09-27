@@ -14,7 +14,12 @@ This creates a `venv/` and installs dependencies from `requirements.txt`. On mac
 
 ```
 rm -rf venv
-make install PYTHON=/usr/local/opt/python@3.13/bin/python3.13
+
+# For linux
+make install PYTHON=/usr/bin/python3.13
+
+# For macOS:
+# make install PYTHON=/usr/local/opt/python@3.13/bin/python3.13
 ```
 
 Scripts that only use `AequilibraeMatrix` (like `trips_to_trip_matrix.py`) don't need this — it only matters for building an AequilibraE `Project` (network).

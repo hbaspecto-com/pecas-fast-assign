@@ -6,10 +6,19 @@ VENV := venv
 venv:
 	$(PYTHON) -m venv $(VENV)
 
+# Install system-level dependencies required on Linux (Debian/Ubuntu).
+# mod_spatialite is the SQLite loadable extension AequilibraE uses for
+# spatial queries; libspatialite-dev provides the headers/library.
+# Skipped automatically on macOS (which uses Homebrew instead).
+sys-deps:
+	@if [ "$$(uname)" = "Linux" ]; then \
+		sudo apt-get install -y libsqlite3-mod-spatialite libspatialite-dev; \
+	fi
+
 # Platform-specific compiler/env handling (e.g. macOS's OpenMP toolchain
 # for building aequilibrae from source) lives in settings.yaml and
 # scripts/native_build_env.py, not here, so this recipe is OS-agnostic.
-install: venv
+install: sys-deps venv
 	$(VENV)/bin/pip install --upgrade pip
 	$(VENV)/bin/pip install pyyaml
 	bash -c 'set -a; eval "$$($(VENV)/bin/python scripts/native_build_env.py)"; set +a; $(VENV)/bin/pip install -r requirements.txt'
