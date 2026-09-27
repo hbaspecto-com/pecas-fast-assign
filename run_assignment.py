@@ -22,12 +22,12 @@ def main():
     results_name = os.getenv("ASSIGN_RESULTS_NAME", "am_auto")
     write_csv = os.getenv("ASSIGN_WRITE_CSV", "1") == "1"
 
-    # Field mapping from your network
-    time_field = os.getenv("ASSIGN_TIME_FIELD", "TIME1")          # free-flow time
-    alt_time_field = os.getenv("ASSIGN_ALT_TIME_FIELD", "TIME_1") # if needed for diagnostics
-    capacity_field = os.getenv("ASSIGN_CAPACITY_FIELD", "AMCAPACITY")
-    vc_field = os.getenv("ASSIGN_VC_FIELD", "VC_1")               # V/C that we’ll multiply by AMCAPACITY for preload
-    link_id_field = os.getenv("ASSIGN_LINK_ID_FIELD", "link_id")  # internal unique ID if available
+    # Field mapping from your network (normalized by AequilibraE to these names)
+    time_field = os.getenv("ASSIGN_TIME_FIELD", "travel_time")
+    alt_time_field = os.getenv("ASSIGN_ALT_TIME_FIELD", "travel_time")
+    capacity_field = os.getenv("ASSIGN_CAPACITY_FIELD", "capacity")
+    vc_field = os.getenv("ASSIGN_VC_FIELD", "VC_1")
+    link_id_field = os.getenv("ASSIGN_LINK_ID_FIELD", "link_id")
 
     print(f"Opening project: {project_path}")
     prj = Project()
@@ -43,37 +43,43 @@ def main():
     mat.computational_view(["trips"])
 
     # Mode/graph
-    modes = prj.network.modes()
-    car_mode = modes.get("c") or next(iter(modes.values()))
-    graph = prj.network.graphs[car_mode]
+    # Ensure graphs are built (for all modes in the DB)
+    if not prj.network.graphs:
+        prj.network.build_graphs()
+    available_modes = list(prj.network.graphs.keys())
+    if not available_modes:
+        print("Error: no graphs built; check that the modes table is populated and links have 'modes' set.",
+              file=sys.stderr)
+        sys.exit(1)
+    car_mode_id = "c" if "c" in available_modes else available_modes[0]
+    graph = prj.network.graphs[car_mode_id]
 
     # Ensure fields exist and wire graph attributes
     for f in [time_field, capacity_field]:
-        if f not in graph.network.graph.columns:
-            print(f"Error: field '{f}' not found in network links.", file=sys.stderr)
+        if f not in graph.graph.columns:
+            print(f"Error: field '{f}' not found in network links. "
+                  f"Available: {list(graph.graph.columns)}", file=sys.stderr)
             sys.exit(1)
 
+    # Set graph cost (only the time/cost field here)
+    graph.set_graph(time_field)
+
     # If link_id_field missing, fallback to the network’s default ID column
-    if link_id_field not in graph.network.graph.columns:
-        # Heuristic fallback commonly present in AequilibraE graphs
-        link_id_field = "link_id" if "link_id" in graph.network.graph.columns else graph.network.graph.columns[0]
+    if link_id_field not in graph.graph.columns:
+        link_id_field = "link_id" if "link_id" in graph.graph.columns else graph.graph.columns[0]
 
-    # Set graph: time, capacity, link_id
-    graph.set_graph(time_field, capacity_field, link_id_field)
-
-    # Optional preload: VC_1 * AMCAPACITY -> initial flows
-    gdf = graph.network.graph  # pandas DataFrame used by AequilibraE under the hood
+    # Optional preload: VC_1 * capacity_ab -> initial flows
+    gdf = graph.graph  # pandas DataFrame backing the graph
     preload = None
     if vc_field in gdf.columns and capacity_field in gdf.columns:
         preload = (gdf[vc_field].fillna(0.0) * gdf[capacity_field].fillna(0.0)).to_numpy()
-        # Replace negatives/NaNs safely
         preload[~(preload >= 0)] = 0.0
-        print("Using preload flows from VC_1 * AMCAPACITY")
+        print(f"Using preload flows from {vc_field} * {capacity_field}")
     else:
-        print("Preload not applied (VC_1 or AMCAPACITY missing).")
+        print(f"Preload not applied ({vc_field} or {capacity_field} missing).")
 
     # Build class and assignment
-    tc = TrafficClass(graph, mat)
+    tc = TrafficClass("car", graph, mat)
     if preload is not None:
         # If TrafficClass/Assignment supports initial flows on links:
         try:
@@ -87,8 +93,8 @@ def main():
     ta.set_classes([tc])
     ta.set_vdf(vdf_name)
     ta.set_vdf_parameters(vdf_params)
-    ta.set_capacity_field(capacity_field)
-    ta.set_time_field(time_field)
+    ta.set_capacity_field(capacity_field)  # capacity is configured on the assignment
+    ta.set_time_field(time_field)  # time/cost also recorded on the assignment
 
     # “Fancier” Frank–Wolfe: use FW with line search (AequilibraE’s default FW does line search).
     # If your build exposes variants, you can set algorithm detail; otherwise "fw" selects FW+line search.
