@@ -24,7 +24,7 @@ aequilibrae_network:
   node_layer: "AM_Node"
   # Written under paths.folder; build_aequilibrae_network.py refuses to
   # overwrite an existing project here unless --overwrite is passed.
-  project_path: "aequilibrae_am"
+  project_path: "aequilibrae_am_jea"
 
 build:
   macos:

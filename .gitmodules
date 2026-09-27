@@ -2,3 +2,7 @@
 	path = vendor/aequilibrae
 	url = https://github.com/hbaspecto-com/aequilibrae.git
 	shallow = true
+[submodule "vendor/qaequilibrae"]
+	path = vendor/qaequilibrae
+	url = https://github.com/hbaspecto-com/qaequilibrae
+	branch = develop
