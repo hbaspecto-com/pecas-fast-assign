@@ -2,6 +2,7 @@ import os
 import sys
 import time
 
+import pandas as pd
 from aequilibrae.project import Project
 from aequilibrae.matrix import AequilibraeMatrix
 from aequilibrae.paths import TrafficClass, TrafficAssignment
@@ -101,8 +102,6 @@ def main():
     ta.set_algorithm("fw")  # Frank–Wolfe with line search
     ta.max_iter = max_iter
     ta.rgap_target = target_rgap
-    ta.store_skims = False
-    ta.report = True  # prints per-iteration progress to console
 
     print(f"Starting assignment: VDF={vdf_name} {vdf_params}, "
           f"time_field={time_field}, capacity_field={capacity_field}, "
@@ -110,22 +109,24 @@ def main():
     t0 = time.time()
     ta.execute()
     print(f"Done in {time.time() - t0:.1f}s")
-    print(f"Final gap: {getattr(ta, 'rgap', None)}")
 
-    # Save results
-    prj.results.save_assignment(ta, results_name)
+    convergence = pd.DataFrame(ta.assignment.convergence_report)
+    final_gap = convergence["rgap"].iloc[-1] if "rgap" in convergence.columns else None
+    print(f"Final gap: {final_gap}")
+    print(convergence.to_string(index=False))
+
+    # Save results to the project results database
+    ta.save_results(table_name=results_name)
     print(f"Saved assignment results as: {results_name}")
 
     if write_csv:
         out_csv = os.path.join(project_path, f"{results_name}_links.csv")
-        prj.results.export_link_results(results_name, out_csv)
+        ta.results().to_csv(out_csv, index=False)
         print(f"Wrote link results CSV: {out_csv}")
 
     # Diagnostics if convergence seems off
-    if getattr(ta, "rgap", 1.0) > max(target_rgap * 5, 1e-3):
+    if final_gap is not None and final_gap > max(target_rgap * 5, 1e-3):
         print("Note: High final gap. Consider verifying AMCAPACITY, TIME1 units/values, and connector logic.")
-        if alt_time_field in gdf.columns:
-            print(f"Alternative time field available: {alt_time_field}. Try ASSIGN_TIME_FIELD={alt_time_field}.")
 
     mat.close()
     prj.close()

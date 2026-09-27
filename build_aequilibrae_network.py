@@ -29,6 +29,8 @@ from config import load_settings
 
 MILES_TO_METERS = 1609.344
 CENTROID_FACTYPE = 0.0
+MIN_TRAVEL_TIME_MINUTES = 1 / 60  # 1 second, expressed in minutes (TIME1 units)
+
 
 settings = load_settings()
 folder = Path(settings["paths"]["folder"])
@@ -75,32 +77,38 @@ def build_links(links: gpd.GeoDataFrame, drop_capacity_threshold: float | None =
     links["capacity_ab"] = links["AMCAPACITY"]
     links["travel_time_ab"] = links["TIME1"]
 
-    # Centroid connectors (FACTYPE == 0) have AMCAPACITY == 0 by convention;
-    # give them a large dummy value so AequilibraE's set_capacity_field()
-    # validation doesn't reject the graph.
+    # Centroid connectors (FACTYPE == 0) have AMCAPACITY == 0 and TIME1 == 0
+    # by convention; give them dummy values so AequilibraE's validation passes.
     connector_mask = links["factype"] == CENTROID_FACTYPE
     links.loc[connector_mask, "capacity_ab"] = 9999.0
+    links.loc[connector_mask, "travel_time_ab"] = MIN_TRAVEL_TIME_MINUTES
 
-    # Check for any remaining non-connector links with zero/null/negative capacity.
-    bad_mask = ~connector_mask & (links["capacity_ab"].isna() | (links["capacity_ab"] <= 0))
-    if bad_mask.any():
-        bad = links.loc[bad_mask, ["link_id", "a_node", "b_node", "name", "factype", "lanes", "speed_ab", "capacity_ab",
-                                   "travel_time_ab"]]
-        print(f"\nWARNING: {bad_mask.sum()} non-connector link(s) have zero/null/negative capacity_ab:")
+    # Handle non-connector links with bad capacity.
+    bad_cap_mask = ~connector_mask & (links["capacity_ab"].isna() | (links["capacity_ab"] <= 0))
+    if bad_cap_mask.any():
+        bad = links.loc[bad_cap_mask, ["link_id", "a_node", "b_node", "name", "factype", "lanes", "speed_ab", "capacity_ab", "travel_time_ab"]]
+        print(f"\nWARNING: {bad_cap_mask.sum()} non-connector link(s) have zero/null/negative capacity_ab:")
         print(bad.to_string(index=False))
         if drop_capacity_threshold is not None:
-            drop_mask = ~connector_mask & (
-                        links["capacity_ab"].isna() | (links["capacity_ab"] <= drop_capacity_threshold))
+            drop_mask = ~connector_mask & (links["capacity_ab"].isna() | (links["capacity_ab"] <= drop_capacity_threshold))
             n_drop = drop_mask.sum()
             links = links[~drop_mask].copy()
+            connector_mask = links["factype"] == CENTROID_FACTYPE  # recompute after drop
             print(f"Dropped {n_drop} link(s) with capacity_ab <= {drop_capacity_threshold}.")
         else:
-            raise SystemExit(
-                "\nHalting. Review the links above and re-run with --drop-low-capacity [THRESHOLD] to remove them."
-            )
+            links.loc[bad_cap_mask, "capacity_ab"] = 9999.0
+            print(f"Floored {bad_cap_mask.sum()} link(s) to capacity_ab = 9999.0.")
 
-        # AM_Link stores geometry as single-part MultiLineString; convert to plain
-        # LINESTRING as required by AequilibraE's links table.
+    # Handle non-connector links with bad travel time.
+    bad_time_mask = ~connector_mask & (links["travel_time_ab"].isna() | (links["travel_time_ab"] <= 0))
+    if bad_time_mask.any():
+        bad = links.loc[bad_time_mask, ["link_id", "a_node", "b_node", "name", "factype", "lanes", "speed_ab", "capacity_ab", "travel_time_ab"]]
+        print(f"\nWARNING: {bad_time_mask.sum()} non-connector link(s) have zero/null/negative travel_time_ab — flooring to {MIN_TRAVEL_TIME_MINUTES:.4f} min (1 second):")
+        print(bad.to_string(index=False))
+        links.loc[bad_time_mask, "travel_time_ab"] = MIN_TRAVEL_TIME_MINUTES
+
+    # AM_Link stores geometry as single-part MultiLineString; convert to plain
+    # LINESTRING as required by AequilibraE's links table.
     links["wkt"] = links.geometry.apply(lambda g: g.geoms[0].wkt)
     return links[
         [
