@@ -120,9 +120,29 @@ def main():
     print(f"Saved assignment results as: {results_name}")
 
     if write_csv:
+        # Build a DataFrame with link_id to join to results()
+        links_df = prj.network.links.data[["link_id", "a_node", "b_node"]].copy()
+
+        res = ta.results()  # DataFrame indexed arbitrarily by implementation; ensure it's materialized
+        # If the results come indexed by link_id, expose it as a column; otherwise merge by a/b if present
+        if "link_id" in res.columns:
+            out = res.copy()
+        elif {"a_node", "b_node"}.issubset(res.columns):
+            out = pd.merge(links_df, res, on=["a_node", "b_node"], how="left")
+        else:
+            # Fall back to index-as-id if provided; rename to link_id when possible
+            out = res.reset_index()
+            if "link_id" in out.columns:
+                pass
+            elif "index" in out.columns:
+                out = out.rename(columns={"index": "link_id"})
+            else:
+                # Last resort: left-join by row order to inject link_id
+                out = pd.concat([links_df.reset_index(drop=True), res.reset_index(drop=True)], axis=1)
+
         out_csv = os.path.join(project_path, f"{results_name}_links.csv")
-        ta.results().to_csv(out_csv, index=False)
-        print(f"Wrote link results CSV: {out_csv}")
+        out.to_csv(out_csv, index=False)
+        print(f"Wrote link results CSV with link_id: {out_csv}")
 
     # Diagnostics if convergence seems off
     if final_gap is not None and final_gap > max(target_rgap * 5, 1e-3):

@@ -30,7 +30,62 @@ Runtime settings (input paths, AM peak period definitions, car modes, macOS buil
 
 The `aequilibrae_network` section controls `build_aequilibrae_network.py`: `gdb`/`link_layer`/`node_layer` locate the source feature layers (relative to `paths.folder`), and `project_path` is where the AequilibraE project gets written (also relative to `paths.folder`).
 
-## Scripts
+## Workflow
+1) Build the network (nodes/links into an AequilibraE project)
+   - From the venv:
+     - python build_aequilibrae_network.py --overwrite
+   - Output: {paths.folder}/{aequilibrae_network.project_path}/project_database.sqlite
+
+2) Build the AM-peak trips matrix
+   - python trips_to_trip_matrix.py
+   - Output: trip matrix .aem next to the trip list CSV and registered in the project
+
+3) Run the assignment
+   - python run_assignment.py
+   - Outputs:
+     - Results database table (non-spatial) in results_database.sqlite (managed by AequilibraE)
+     - CSV at {project_path}/{ASSIGN_RESULTS_NAME}_links.csv (default am_auto_links.csv)
+
+4) View the base links/nodes in QGIS
+   - Data Source Manager (Ctrl+L) > Vector
+   - Source Type: File
+   - File: {project_path}/project_database.sqlite
+   - Add
+   - In the layer chooser dialog, pick:
+     - links (geometry = LineString, EPSG:4326)
+     - nodes (geometry = Point, EPSG:4326)
+   - OK
+
+5) View congested results in QGIS (two easy options)
+
+   Option A — Use the CSV (recommended, no DB plugins needed):
+   - Data Source Manager (Ctrl+L) > Delimited Text
+   - File name: {project_path}/am_auto_links.csv
+   - Geometry: None (no geometry)
+   - Add
+   - Join to links:
+     - Right‑click links > Properties > Joins > +
+     - Join layer: am_auto_links (the CSV you just added)
+     - Join field(s): If the CSV contains link_id, join on link_id.
+       If it does not, create a temporary join key in both layers:
+       - Links: Field Calculator → ab_key (string) = to_string("a_node") || '_' || to_string("b_node")
+       - CSV: Layer styling panel > Open Attribute Table > Field Calculator → ab_key (string) = "a_node" || '_' || "b_node"
+       - Join on ab_key.
+     - OK
+   - Style the links layer using joined fields such as trips_ab, congested_time, VOC, etc.
+
+   Option B — Load the non-spatial results table from a plain SQLite file:
+   - Data Source Manager (Ctrl+L) > Vector
+   - Source Type: File
+   - File: {project_path}/results_database.sqlite
+   - Add
+   - From the table picker, choose your results table (e.g., am_auto)
+   - Then perform the same attribute join to links as in Option A.
+
+Notes
+- If the results table doesn’t appear, ensure the assignment finished and printed “Saved assignment results as: <name>”.
+- If the CSV lacks link_id, join by a_node/b_node as described above.
+- If a layer looks empty, right‑click > Zoom to Layer and verify Project CRS has on‑the‑fly reprojection enabled.
 
 - `trips_to_trip_matrix.py` — filters PECAS trip data down to AM peak car trips and builds an AequilibraE trip matrix (`.aem`). Pass `--from-trip-list` to skip the filter step and reuse an existing trip list CSV.
 - `build_aequilibrae_network.py` — builds an AequilibraE project (nodes + links) from the `AM_Link`/`AM_Node` feature layers in the ARC `OUTPUTS.GDB` file geodatabase. Pass `--overwrite` to replace an existing project at the configured `project_path`. See the module docstring for the modeling decisions baked in (centroid detection, direction, units).
