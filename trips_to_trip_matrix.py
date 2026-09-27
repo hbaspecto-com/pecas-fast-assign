@@ -1,6 +1,7 @@
 
 import os
 import shutil
+import numpy as np
 import pandas as pd
 from aequilibrae.matrix import AequilibraeMatrix
 from aequilibrae.project import Project
@@ -56,6 +57,23 @@ mat.create_from_trip_list(
 # AequilibraE saves the .aem alongside the trip list CSV with the same stem
 aem_path = os.path.splitext(trip_list_path)[0] + '.aem'
 print(f"  Matrix written to: {aem_path}")
+
+# --- Step 2b: Fix up the zone index ---
+# create_from_trip_list() leaves the matrix's zone index at all zeros - it
+# never assigns the actual TAZ numbers (AequilibraE bug/gap, confirmed
+# against the installed version). The assignment step matches the matrix's
+# zone index against the network's centroid node ids, so without this the
+# two are never compatible. Re-derive the same sorted zone list the library
+# used internally to build the matrix and write it into the zone index.
+trip_df = pd.read_csv(trip_list_path)
+zones_list = sorted(set(trip_df['orig_taz'].unique()) | set(trip_df['dest_taz'].unique()))
+mat_fix = AequilibraeMatrix()
+mat_fix.load(aem_path)
+mat_fix.indices[:, 0] = np.array(zones_list)
+mat_fix.set_index(mat_fix.index_names[0])
+mat_fix.save()
+mat_fix.close()
+print(f"  Zone index set to {len(zones_list):,} TAZ ids (range {zones_list[0]}-{zones_list[-1]})")
 
 # --- Step 3: Load and summarise ---
 mat2 = AequilibraeMatrix()
