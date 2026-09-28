@@ -62,6 +62,27 @@ def main():
                   f"Available: {list(graph.graph.columns)}", file=sys.stderr)
             sys.exit(1)
 
+    # Preflight: ensure results table name won’t collide
+    overwrite = os.getenv("ASSIGN_OVERWRITE_RESULTS", "0") == "1"
+    uniquify = os.getenv("ASSIGN_UNIQUE_RESULTS", "0") == "1"
+    base_results_name = results_name
+    if prj.results.check_exists(results_name):
+        if overwrite:
+            print(f"Results '{results_name}' already exists; deleting before run (ASSIGN_OVERWRITE_RESULTS=1).")
+            prj.results.delete_record(results_name)
+            prj.results.reload()
+        elif uniquify:
+            import datetime as _dt
+            ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+            results_name = f"{base_results_name}_{ts}"
+            print(f"Results '{base_results_name}' exists; writing to '{results_name}' (ASSIGN_UNIQUE_RESULTS=1).")
+        else:
+            print(f"Error: results '{results_name}' already exists. "
+                  f"Set ASSIGN_OVERWRITE_RESULTS=1 to replace it, or ASSIGN_UNIQUE_RESULTS=1 to write to a "
+                  f"timestamped name.", file=sys.stderr)
+            prj.close()
+            sys.exit(2)
+
     # Set graph cost (only the time/cost field here)
     graph.set_graph(time_field)
 
@@ -123,22 +144,18 @@ def main():
         # Build a DataFrame with link_id to join to results()
         links_df = prj.network.links.data[["link_id", "a_node", "b_node"]].copy()
 
-        res = ta.results()  # DataFrame indexed arbitrarily by implementation; ensure it's materialized
-        # If the results come indexed by link_id, expose it as a column; otherwise merge by a/b if present
+        res = ta.results()
         if "link_id" in res.columns:
             out = res.copy()
         elif {"a_node", "b_node"}.issubset(res.columns):
             out = pd.merge(links_df, res, on=["a_node", "b_node"], how="left")
         else:
-            # Fall back to index-as-id if provided; rename to link_id when possible
             out = res.reset_index()
-            if "link_id" in out.columns:
-                pass
-            elif "index" in out.columns:
-                out = out.rename(columns={"index": "link_id"})
-            else:
-                # Last resort: left-join by row order to inject link_id
-                out = pd.concat([links_df.reset_index(drop=True), res.reset_index(drop=True)], axis=1)
+            if "link_id" not in out.columns:
+                if "index" in out.columns:
+                    out = out.rename(columns={"index": "link_id"})
+                else:
+                    out = pd.concat([links_df.reset_index(drop=True), res.reset_index(drop=True)], axis=1)
 
         out_csv = os.path.join(project_path, f"{results_name}_links.csv")
         out.to_csv(out_csv, index=False)
