@@ -18,6 +18,7 @@ project_path = os.path.join(folder, settings['aequilibrae_network']['project_pat
 # Period numbering: period 1 = 3:00am, each period = 30 min
 # 7:00am = period 9, 7:30am = period 10 (covers 7:00-8:00am)
 AM_PEAK_PERIODS = settings['trip_filter']['am_peak_periods']
+VOLUME_TIME_SCALE = settings['trip_filter']['volume_time_scale']
 
 CAR_MODES = set(settings['trip_filter']['car_modes'])
 
@@ -78,6 +79,8 @@ nb_zones = len(zones_list)
 full = np.zeros((nb_zones, nb_zones), dtype=np.float64)
 for (orig, dest), trips in trip_df.groupby(['orig_taz', 'dest_taz'])['trips'].sum().items():
     full[zone_index[orig], zone_index[dest]] += trips
+
+full /= VOLUME_TIME_SCALE
 
 # AequilibraE saves the .aem alongside the trip list CSV with the same stem
 aem_path = os.path.splitext(trip_list_path)[0] + '.aem'
