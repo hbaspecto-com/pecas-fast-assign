@@ -25,8 +25,20 @@ CAR_MODES = set(settings['trip_filter']['car_modes'])
 # --- Step 1: Filter trip data and write trip list CSV ---
 # Skip this step by passing --from-trip-list on the command line
 # e.g.: python trips_to_trip_matrix.py --from-trip-list
+#
+# Output format: OMX by default. Pass --format aem for the legacy AequilibraE
+# .aem format.
+# DEPRECATED: the .aem output path is kept only for backwards compatibility.
+# We don't need to maintain or test it; use OMX.
 import sys
 skip_to_trip_list = '--from-trip-list' in sys.argv
+matrix_format = 'omx'
+if '--format' in sys.argv:
+    matrix_format = sys.argv[sys.argv.index('--format') + 1].lower()
+if matrix_format not in ('omx', 'aem'):
+    raise SystemExit(f"Unsupported --format '{matrix_format}'; use 'omx' (default) or 'aem' (deprecated)")
+if matrix_format == 'aem':
+    print("Warning: --format aem is deprecated and no longer maintained or tested; prefer the default OMX output.")
 
 if skip_to_trip_list:
     print(f"Skipping CSV filter step, using existing trip list: {trip_list_path}")
@@ -82,36 +94,44 @@ for (orig, dest), trips in trip_df.groupby(['orig_taz', 'dest_taz'])['trips'].su
 
 full /= VOLUME_TIME_SCALE
 
-# AequilibraE saves the .aem alongside the trip list CSV with the same stem
-aem_path = os.path.splitext(trip_list_path)[0] + '.aem'
+# The matrix file is saved alongside the trip list CSV with the same stem
+matrix_path = os.path.splitext(trip_list_path)[0] + '.' + matrix_format
 mat = AequilibraeMatrix()
-mat.create_empty(file_name=aem_path, zones=nb_zones, matrix_names=['trips'], memory_only=False)
+if matrix_format == 'omx':
+    # Build in memory, then export to OMX
+    mat.create_empty(zones=nb_zones, matrix_names=['trips'], memory_only=True)
+else:
+    # DEPRECATED: .aem output - not maintained or tested, prefer OMX
+    mat.create_empty(file_name=matrix_path, zones=nb_zones, matrix_names=['trips'], memory_only=False)
 mat.indices[:, 0] = np.array(zones_list)
 mat.set_index(mat.index_names[0])
 mat.matrix['trips'][:, :] = full
-mat.save()
+if matrix_format == 'omx':
+    mat.export(matrix_path)
+else:
+    mat.save()
 mat.close()
-print(f"  Matrix written to: {aem_path}")
+print(f"  Matrix written to: {matrix_path}")
 print(f"  Zone index set to {nb_zones:,} network centroid ids (range {zones_list[0]}-{zones_list[-1]})")
 
 # --- Step 3: Load and summarise ---
 mat2 = AequilibraeMatrix()
-mat2.load(aem_path)
+mat2.load(matrix_path)
 mat2.computational_view(['trips'])
 print(f"  Zones: {mat2.zones}")
-print(f"  Total demand: {mat2.matrix['trips'].sum():,.0f}")
+print(f"  Total demand: {mat2.get_matrix('trips').sum():,.0f}")
 mat2.close()
 
 # --- Step 4: Register the matrix in the AequilibraE network project ---
 # so it shows up alongside the nodes/links built by build_aequilibrae_network.py
 # (see that script's project_path setting) instead of living only as a
-# standalone .aem next to the trip list CSV.
+# standalone file next to the trip list CSV.
 print("Registering matrix in the AequilibraE network project...")
 project = Project()
 project.open(project_path)
 
 matrix_name = os.path.splitext(os.path.basename(trip_list_path))[0]
-project_aem_name = os.path.basename(aem_path)
+project_matrix_file = os.path.basename(matrix_path)
 
 if project.matrices.check_exists(matrix_name):
     # delete_record() unlinks the file at this path too, so it must run
@@ -122,8 +142,8 @@ if project.matrices.check_exists(matrix_name):
     # reload the registry from the (now updated) database afterwards.
     project.matrices.delete_record(matrix_name)
     project.matrices.reload()
-shutil.copy2(aem_path, os.path.join(project.matrices.fldr, project_aem_name))
-project.matrices.new_record(matrix_name, project_aem_name)
+shutil.copy2(matrix_path, os.path.join(project.matrices.fldr, project_matrix_file))
+project.matrices.new_record(matrix_name, project_matrix_file)
 project.close()
 print(f"  Matrix '{matrix_name}' registered in project: {project_path}")
 

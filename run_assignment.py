@@ -20,7 +20,7 @@ def main():
     vdf_params = {"alpha": 0.15, "beta": 4.0}
     max_iter = int(os.getenv("ASSIGN_MAX_ITERS", "200"))
     target_rgap = float(os.getenv("ASSIGN_TARGET_RGAP", "1e-4"))
-    results_name = os.getenv("ASSIGN_RESULTS_NAME", "am_auto")
+    results_name = os.getenv("ASSIGN_RESULTS_NAME", "am3_auto")
     write_csv = os.getenv("ASSIGN_WRITE_CSV", "1") == "1"
 
     # Field mapping from your network (normalized by AequilibraE to these names)
@@ -38,9 +38,13 @@ def main():
     if not prj.matrices.check_exists(matrix_stem):
         print(f"Error: matrix '{matrix_stem}' not found in project. Run trips_to_trip_matrix.py first.", file=sys.stderr)
         sys.exit(1)
-    aem_path = os.path.join(prj.matrices.fldr, prj.matrices.get_record(matrix_stem).file_name)
+    # OMX is the default/preferred format written by trips_to_trip_matrix.py.
+    # DEPRECATED: .aem matrices still load here, but that path is not maintained or tested.
+    matrix_path = os.path.join(prj.matrices.fldr, prj.matrices.get_record(matrix_stem).file_name)
+    if matrix_path.lower().endswith(".aem"):
+        print("Warning: loading a deprecated .aem matrix; regenerate it as OMX with trips_to_trip_matrix.py.")
     mat = AequilibraeMatrix()
-    mat.load(aem_path)
+    mat.load(matrix_path)
     mat.computational_view(["trips"])
 
     # Mode/graph

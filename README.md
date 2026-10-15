@@ -38,7 +38,9 @@ The `aequilibrae_network` section controls `build_aequilibrae_network.py`: `gdb`
 
 2) Build the AM-peak trips matrix
    - python trips_to_trip_matrix.py
-   - Output: trip matrix .aem next to the trip list CSV and registered in the project
+   - Output: trip matrix .omx next to the trip list CSV and registered in the project
+   - OMX is the default and preferred format. `--format aem` still writes the legacy AequilibraE
+     `.aem` format, but it is deprecated: we don't maintain or test it.
 
 3) Run the assignment
    - python run_assignment.py
@@ -87,7 +89,7 @@ Notes
 - If the CSV lacks link_id, join by a_node/b_node as described above.
 - If a layer looks empty, right‑click > Zoom to Layer and verify Project CRS has on‑the‑fly reprojection enabled.
 
-- `trips_to_trip_matrix.py` — filters PECAS trip data down to AM peak car trips and builds an AequilibraE trip matrix (`.aem`). Pass `--from-trip-list` to skip the filter step and reuse an existing trip list CSV.
+- `trips_to_trip_matrix.py` — filters PECAS trip data down to AM peak car trips and builds a trip matrix (OMX by default; `.omx` is preferred). Pass `--from-trip-list` to skip the filter step and reuse an existing trip list CSV. `--format aem` writes the deprecated AequilibraE `.aem` format, which we don't maintain or test.
 - `build_aequilibrae_network.py` — builds an AequilibraE project (nodes + links) from the `AM_Link`/`AM_Node` feature layers in the ARC `OUTPUTS.GDB` file geodatabase. Pass `--overwrite` to replace an existing project at the configured `project_path`. See the module docstring for the modeling decisions baked in (centroid detection, direction, units).
 - `diagnostic_trip_data.py` — inspects trip data to check whether rows represent person-trips or vehicle-trips, and lists trip mode values.
 - `compare_trip_data_files.py` — compares candidate trip data files for duplicates/differences.
