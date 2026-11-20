@@ -5,10 +5,15 @@ paths:
   folder: "/nfs/samba/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified"
   input_file: "tripData.csv"
   trip_list_file: "tripData_am3_cars.csv"
+
   taz_trips_omx: "/nfs/samba/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified/taz_trips.omx"
 
   abm_trips_csv: "/nfs/samba/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified/tripData.csv"
+  abm_omx_from_abm_trips_csv: "/nfs/samba/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified/aequilibrae_am/matrices/tripData_am3_cars.omx"
+  abm_trips_omx: "/nfs/samba/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified/tripsAM.OMX"
 
+  t171_2020_luz_trips_csv: "/nfs/samba/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified/T171/2020/LUZTrips.csv"
+  t171_2020_luz_trips_omx: "/nfs/samba/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified/T171/2020/luz_trips.omx"
   t171_2020_taz_trips_csv: "/nfs/samba/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified/T171/2020/tazTrips.csv"
   t171_2020_taz_trips_omx: "/nfs/samba/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified/T171/2020/taz_trips.omx"
   t171_trip_calculations_i: "/nfs/samba/ProjectWork/Atlanta PECAS 107080x0/2026 Project/Assignment_Simplified/T171/AllYears/Inputs/TripCalculationsI.csv"
